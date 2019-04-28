@@ -313,12 +313,19 @@ public class ControlDisplay {
     // call = amount that must be added by player to stay in hand
     // pot amount = total no. of chips in pot and is used exclusively for a bet size slider
 
-    public void enable(int minBet, int maxBet, int call, int potAmount) {
-        minimumBet = minBet;
-        maximumBet = maxBet;
+    public void enable(int minBet, int maxBet, int call, int potAmount, int currentBet, int currentChips) {
+        if (minBet > currentChips) minimumBet = currentChips;
+        else minimumBet = minBet;
+        maximumBet = maxBet - currentBet;
         toCall = call;
+        chips = currentChips;
 
-        callButton.setText(call == 0 ? "Check" : "Call\n" + toCall);
+        String s;
+        if (toCall == 0) s = "Check";
+        else if (toCall == chips) s = "All In";
+        else s = "Call\n" + toCall;
+
+        callButton.setText(s);
 
         if (potAmount > maxBet) potAmount = maxBet;
         potPercent.setMin(minBet);
@@ -343,7 +350,7 @@ public class ControlDisplay {
         sub250.setDisable(false);
         callButton.setDisable(false);
         bet.setDisable(false);
-        fold.setDisable(call == 0);
+        fold.setDisable(toCall == 0);
         toBetField.setDisable(false);
         totalPercent.setDisable(false);
         potPercent.setDisable(false);

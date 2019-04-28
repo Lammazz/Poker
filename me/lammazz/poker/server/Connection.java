@@ -2,6 +2,7 @@ package me.lammazz.poker.server;
 
 import me.lammazz.poker.network.PlayerData;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -46,6 +47,7 @@ public class Connection implements Runnable{
                 }
             }
         }catch(IOException e) {
+            System.out.println("Connection to player ended unexpectedly. Disconnected?");
             e.printStackTrace();
         }
         running = false;

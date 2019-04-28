@@ -166,12 +166,12 @@ public class PokerClient {
         });
     }
 
-    public void setCurrentTurn(int minimumRaise, int maxBet, int call, int potAmount) {
+    public void setCurrentTurn(int minimumRaise, int maxBet, int call, int potAmount, int currentBet, int currentChips) {
         Platform.runLater(new Runnable() {
             @Override
             public void run() {
                 int minBet = call + minimumRaise;
-                controlDisplay.enable(minBet,maxBet,call,potAmount);
+                controlDisplay.enable(minBet,maxBet,call,potAmount,currentBet,currentChips);
             }
         });
     }

@@ -53,7 +53,12 @@ public class EventListener {
                 int connectedPlayers = ConnectionHandler.connectedPlayers();
                 System.out.println("Connected players: " + connectedPlayers);
                 System.out.println("CurrentState: " + ps.getCurrentState().toString());
-                if (ps.getCurrentState() == GameState.PREGAME && connectedPlayers >= 2) PokerServer.getInstance().nextState();
+                int playablePlayers = 0;
+                for (Connection c : ConnectionHandler.connections) {
+                    if (c.playerData == null) continue;
+                    if (c.playerData.chips != 0) playablePlayers++;
+                }
+                if (ps.getCurrentState() == GameState.PREGAME && playablePlayers >= 2) PokerServer.getInstance().nextState();
 
                 PokerServer.getInstance().updatePlayerCountLabel();
             } else {
@@ -87,6 +92,7 @@ public class EventListener {
             connection.playerData.hasActed = true;
 
             if (packet.amount < 0) packet.amount = 0;
+            if (packet.amount > connection.playerData.chips) packet.amount = connection.playerData.chips;
 
             int raiseAmount = packet.amount - ps.toStay;
             if (raiseAmount != 0) ps.minimumRaise = raiseAmount;
@@ -94,40 +100,39 @@ public class EventListener {
             connection.playerData.bet(packet.amount);
             ps.toStay = connection.playerData.betAmount;
 
-            Connection nextTurn = ps.playerAtSeat(ps.nextPlayingSeat(connection.playerData.seat));
+            Connection nextTurn = ps.playerAtSeat(ps.nextPlayingSeat(connection.playerData.seat, false));
 
-            if (nextTurn.playerData.hasActed && nextTurn.playerData.betAmount == ps.toStay) {
+            if (ps.countNotAllIn() < 2 || (nextTurn.playerData.hasActed && nextTurn.playerData.betAmount == ps.toStay)) {
                 ConnectionHandler.sendAll(new PlayerBetPacket(connection.id, connection.playerData.betAmount, connection.playerData.chips,
-                        -1, -1, -1, -1, -1,-1));
+                        -1, -1, -1, -1, -1,-1, -1));
                 ps.nextState();
             } else {
                 ConnectionHandler.sendAll(new PlayerBetPacket(connection.id, connection.playerData.betAmount, connection.playerData.chips,
                         nextTurn.id, nextTurn.playerData.betAmount, ps.toStay, ps.minimumRaise, ps.maximumBet(nextTurn.id),
-                        ps.potAmount()));
+                        ps.potAmount(), nextTurn.playerData.chips));
                 ps.startPlayerTurn(nextTurn.playerData);
             }
 
         } else if (p instanceof ClientFoldPacket) {
-            ClientFoldPacket packet = (ClientFoldPacket) p;
             PokerServer ps = PokerServer.getInstance();
             if (ps.getCurrentTurnID() != connection.id) return;
 
             connection.playerData.isCurrentTurn = false;
             connection.playerData.hasActed = true;
 
-            Connection nextTurn = ps.playerAtSeat(ps.nextPlayingSeat(connection.playerData.seat));
-
             if (ps.countInPlay() == 2) {
-                ps.goQuickwin(nextTurn.playerData);
+                ps.goQuickwin(ps.playerAtSeat(ps.nextPlayingSeat(connection.playerData.seat, true)).playerData);
+//                ps.goQuickwin(nextTurn.playerData);
             } else {
+                Connection nextTurn = ps.playerAtSeat(ps.nextPlayingSeat(connection.playerData.seat, false));
                 connection.playerData.inPlay = false;
-                if (nextTurn.playerData.betAmount == ps.toStay) { // next state
+                if (nextTurn.playerData.betAmount == ps.toStay || ps.countNotAllIn() < 2) { // next state
                     ConnectionHandler.sendAll(new PlayerFoldPacket(connection.id, -1, -1, -1, -1, -1,
-                            -1));
+                            -1, -1));
                     ps.nextState();
                 } else {
                     ConnectionHandler.sendAll(new PlayerFoldPacket(connection.id, nextTurn.id, nextTurn.playerData.betAmount, ps.toStay,
-                            ps.minimumRaise, ps.maximumBet(nextTurn.id), ps.potAmount()));
+                            ps.minimumRaise, ps.maximumBet(nextTurn.id), ps.potAmount(), nextTurn.playerData.chips));
                     ps.startPlayerTurn(nextTurn.playerData);
                 }
             }

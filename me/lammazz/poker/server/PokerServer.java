@@ -185,19 +185,30 @@ public class PokerServer {
         return from;
     }
 
-    public boolean isSeatPlaying(int seatID) {
+    public boolean isSeatPlaying(int seat) {
+        return isSeatPlaying(seat, true);
+    }
+
+    public boolean isSeatPlaying(int seatID, boolean includeAllIn) {
         for (Connection connection: ConnectionHandler.connections) {
             if (connection.playerData == null) continue;
-            if (connection.playerData.seat == seatID &&
-                connection.playerData.inPlay) return true;
+            boolean b;
+            if (includeAllIn) b = connection.playerData.inPlay;
+            else b = connection.playerData.inPlay && connection.playerData.chips != 0;
+            if (connection.playerData.seat == seatID && b) return true;
         }
         return false;
     }
 
-    public int nextPlayingSeat(int from) {
+//    public int nextPlayingSeat(int from) {
+//        return nextPlayingSeat(from, true);
+//    }
+
+    public int nextPlayingSeat(int from, boolean includeAllIn) {
         System.out.println("NextPlayingSeat From:" + from);
+        int start = from;
         do from = ((from + 1) % 8);
-        while (!isSeatPlaying(from));
+        while (!isSeatPlaying(from, includeAllIn) && start != from);
         System.out.println("NextPlayingSeat To:" + from);
         return from;
     }
@@ -222,20 +233,22 @@ public class PokerServer {
             public void run() {
                 if (turnTrack != currentTurnCount) return;
                 currentTurnCount++;
-                Connection nextTurn = playerAtSeat(nextPlayingSeat(player.seat));
+                Connection nextTurn = playerAtSeat(nextPlayingSeat(player.seat, false));
 
                 if (countInPlay() == 2) {
                     goQuickwin(nextTurn.playerData);
                 } else {
                     player.inPlay = false;
-                    if (nextTurn.playerData.betAmount == toStay) { // would-be next player has already called therefore go to next state
+                    if (nextTurn.id == player.id || nextTurn.playerData.betAmount == toStay) {
+                        // would-be next player has already called therefore go to next state
+                        // OR other player(s) are all in
                         PlayerFoldPacket packet = new PlayerFoldPacket(player.id, -1, -1, -1, -1, -1,
-                                -1);
+                                -1, -1);
                         ConnectionHandler.sendAll(packet);
                         nextState();
                     } else { // next player has not called yet therefore set current turn to theirs
                         PlayerFoldPacket packet = new PlayerFoldPacket(player.id, nextTurn.id, nextTurn.playerData.betAmount, toStay, minimumRaise,
-                                maximumBet(nextTurn.id), potAmount());
+                                maximumBet(nextTurn.id), potAmount(), nextTurn.playerData.chips);
                         ConnectionHandler.sendAll(packet);
                         startPlayerTurn(nextTurn.playerData);
                     }
@@ -266,18 +279,17 @@ public class PokerServer {
             if (connection.playerData == null) continue;
             PlayerData pd = connection.playerData;
             if (pd.id == playerID) player = pd;
-            if (pd.chips > high1) {
+            int a = pd.chips + pd.betAmount;
+            if (a > high1) {
                 high2 = high1;
-                high1 = pd.chips;
-            } else {
-                if (pd.chips > high2) {
-                    high2 = pd.chips;
-                }
+                high1 = a;
+            } else if (a > high2) {
+                high2 = a;
             }
         }
         if (player == null) return -1;
-        if (player.chips == high1) return high2;
-        return player.chips;
+        if (player.chips + player.betAmount == high1) return high2;
+        return player.chips + player.betAmount;
     }
 
     public void goQuickwin(PlayerData winner) {
@@ -299,6 +311,16 @@ public class PokerServer {
             }
         });
 
+    }
+
+    public int countNotAllIn() {
+        int amount = 0;
+        for (Connection connection : ConnectionHandler.connections) {
+            PlayerData pd = connection.playerData;
+            if (pd == null) continue;
+            if (pd.inPlay && pd.chips != 0) amount++;
+        }
+        return amount;
     }
 
     public void nextState() {
@@ -332,8 +354,6 @@ public class PokerServer {
 
         } else if (currentState == GameState.INTERMISSION) { // go to preflop
 
-            currentState = GameState.PREFLOP;
-
             for (Connection connection : ConnectionHandler.connections) {
                 if (connection.playerData == null) continue;
                 connection.playerData.inPlay = connection.playerData.chips != 0;
@@ -348,39 +368,51 @@ public class PokerServer {
             for (int i = 0; i < inPlay.length; i++) inPlay[i] = inPlayList.get(i);
 
             if (countInPlay() < 2) {
-                // RETURN GAME TO PREGAME, NOT ENOUGH PLAYERS
+                currentState = GameState.PREGAME;
+                currentTurnCount++;
+
+                List<TwoInt> l = new ArrayList<TwoInt>();
+                for (Connection connection : ConnectionHandler.connections) {
+                    if (connection.playerData == null) continue;
+                    l.add(new TwoInt(connection.playerData.id, connection.playerData.chips));
+                }
+                Packet packet = new GamestatePregamePacket(l.toArray(new TwoInt[l.size()]));
+                ConnectionHandler.sendAll(packet);
+                return;
             }
+
+            currentState = GameState.PREFLOP;
 
             shuffleDeck();
 
-            dealerSeat = nextOccupiedSeat(dealerSeat);
+            dealerSeat = nextPlayingSeat(dealerSeat, false);
 
             PlayerData dealer = playerAtSeat(dealerSeat).playerData;
 
-            smallBlindSeat = nextOccupiedSeat(dealerSeat);
+            smallBlindSeat = nextPlayingSeat(dealerSeat, false);
             PlayerData toPaySmallBlind = playerAtSeat(smallBlindSeat).playerData;
             int toPay = smallBlind;
             if (toPaySmallBlind.chips < smallBlind) toPay = toPaySmallBlind.chips;
             toPaySmallBlind.bet(toPay);
 
-            int bigBlindSeat = nextOccupiedSeat(smallBlindSeat);
+            int bigBlindSeat = nextPlayingSeat(smallBlindSeat, false);
             PlayerData toPayBigBlind = playerAtSeat(bigBlindSeat).playerData;
             toPay = bigBlind;
             if (toPayBigBlind.chips < bigBlind) toPay = toPayBigBlind.chips;
             toPayBigBlind.bet(toPay);
 
-            int utgSeat = nextOccupiedSeat(bigBlindSeat);
+            int utgSeat = nextPlayingSeat(bigBlindSeat, false);
             Connection utg = playerAtSeat(utgSeat);
 
             PlayerData toDeal = toPayBigBlind;
             do {
                 toDeal.leftCard = nextCard();
                 toDeal.rightCard = nextCard();
-                toDeal = playerAtSeat(nextPlayingSeat(toDeal.seat)).playerData;
+                toDeal = playerAtSeat(nextPlayingSeat(toDeal.seat, true)).playerData;
             } while (toDeal.seat != bigBlindSeat);
 
             GamestatePreflopPacket packet = new GamestatePreflopPacket(dealer.id, toPayBigBlind.id, toPaySmallBlind.id, utg.id,
-                    null, null, inPlay, bigBlind, smallBlind, utg.playerData.betAmount, maximumBet(utg.id));
+                    null, null, inPlay, bigBlind, smallBlind, utg.playerData.betAmount, maximumBet(utg.id), utg.playerData.chips);
 
             for (Connection connection : ConnectionHandler.connections) {
                 if (connection.playerData == null) continue;
@@ -414,12 +446,20 @@ public class PokerServer {
             toStay = 0;
             minimumRaise = bigBlind;
 
-            Connection nextTurn = playerAtSeat(nextPlayingSeat(dealerSeat));
-            Packet packet = new GamestateFlopPacket(nextTurn.id, maximumBet(nextTurn.id), minimumRaise, potAmount(),
-                    tableCard1, tableCard2, tableCard3);
-            ConnectionHandler.sendAll(packet);
+            if (countNotAllIn() >= 2) {
+                Connection nextTurn = playerAtSeat(nextPlayingSeat(dealerSeat, false));
+                Packet packet = new GamestateFlopPacket(nextTurn.id, maximumBet(nextTurn.id), minimumRaise, potAmount(),
+                        tableCard1, tableCard2, tableCard3, nextTurn.playerData.chips);
+                ConnectionHandler.sendAll(packet);
 
-            startPlayerTurn(nextTurn.playerData);
+                startPlayerTurn(nextTurn.playerData);
+            } else {
+                Packet packet = new GamestateFlopPacket(-1, -1, -1, potAmount(),
+                        tableCard1, tableCard2, tableCard3, -1);
+                ConnectionHandler.sendAll(packet);
+                currentTurnCount++;
+                nextState();
+            }
 
         } else if (currentState == GameState.FLOP) { // go to turn
 
@@ -435,12 +475,20 @@ public class PokerServer {
             toStay = 0;
             minimumRaise = bigBlind;
 
-            Connection nextTurn = playerAtSeat(nextPlayingSeat(dealerSeat));
-            Packet packet = new GamestateTurnPacket(nextTurn.id, maximumBet(nextTurn.id), minimumRaise, potAmount(),
-                    tableCard4);
-            ConnectionHandler.sendAll(packet);
+            if (countNotAllIn() >= 2) {
+                Connection nextTurn = playerAtSeat(nextPlayingSeat(dealerSeat, false));
+                Packet packet = new GamestateTurnPacket(nextTurn.id, maximumBet(nextTurn.id), minimumRaise, potAmount(),
+                        tableCard4, nextTurn.playerData.chips);
+                ConnectionHandler.sendAll(packet);
 
-            startPlayerTurn(nextTurn.playerData);
+                startPlayerTurn(nextTurn.playerData);
+            } else {
+                Packet packet = new GamestateTurnPacket(-1, -1, -1, potAmount(),
+                        tableCard4, -1);
+                ConnectionHandler.sendAll(packet);
+                currentTurnCount++;
+                nextState();
+            }
 
         } else if (currentState == GameState.TURN) { // go to river
 
@@ -456,16 +504,25 @@ public class PokerServer {
             toStay = 0;
             minimumRaise = bigBlind;
 
-            Connection nextTurn = playerAtSeat(nextPlayingSeat(dealerSeat));
-            Packet packet = new GamestateRiverPacket(nextTurn.id, maximumBet(nextTurn.id), minimumRaise, potAmount(),
-                    tableCard5);
-            ConnectionHandler.sendAll(packet);
+            if (countNotAllIn() >= 2) {
+                Connection nextTurn = playerAtSeat(nextPlayingSeat(dealerSeat, false));
+                Packet packet = new GamestateRiverPacket(nextTurn.id, maximumBet(nextTurn.id), minimumRaise, potAmount(),
+                        tableCard5, nextTurn.playerData.chips);
+                ConnectionHandler.sendAll(packet);
 
-            startPlayerTurn(nextTurn.playerData);
+                startPlayerTurn(nextTurn.playerData);
+            } else {
+                Packet packet = new GamestateRiverPacket(-1, -1, -1, potAmount(),
+                        tableCard5, -1);
+                ConnectionHandler.sendAll(packet);
+                currentTurnCount++;
+                nextState();
+            }
 
         } else if (currentState == GameState.RIVER) { // go to showdown
 
             currentState = GameState.SHOWDOWN;
+            currentTurnCount++;
 
             //determine hands for each inPlay player + rank hands
 

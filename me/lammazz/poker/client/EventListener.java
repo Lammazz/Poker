@@ -49,7 +49,7 @@ public class EventListener {
                 packet.data[i].betAmount = 0;
                 ph.players.add(packet.data[i]);
             }
-//            for (PlayerData playerData : ph.players) playerData.inPlay = false;
+            for (PlayerData playerData : ph.players) playerData.inPlay = false;
             pc.updateTableDisplay(0, null, null, null, null, null);
             pc.updateDisplay();
         } else if (p instanceof GamestatePreflopPacket) {
@@ -90,7 +90,7 @@ public class EventListener {
             pc.updateDisplay();
             pc.updateTableDisplay(pc.smallBlind + pc.bigBlind, null, null, null, null, null);
             if (pc.getPlayerHandler().getPlayer(client.id).isCurrentTurn) pc.setCurrentTurn(pc.bigBlind,packet.maximumBet,
-                    pc.bigBlind-packet.currentBet,pc.bigBlind + pc.smallBlind);
+                    pc.bigBlind-packet.currentBet,pc.bigBlind + pc.smallBlind, packet.currentBet, packet.currentChips);
             else pc.setOtherPlayerTurn();
         } else if (p instanceof PlayerBetPacket) {
             PlayerBetPacket packet = (PlayerBetPacket) p;
@@ -114,7 +114,7 @@ public class EventListener {
             pc.newTurnStart(40);
             pc.updateDisplay();
             if (next.id == client.id) pc.setCurrentTurn(packet.minimumRaise, packet.maximumBet, packet.toStay - packet.currentBet,
-                    packet.potAmount);
+                    packet.potAmount, packet.currentBet, packet.currentChips);
         } else if (p instanceof PlayerFoldPacket) {
             PlayerFoldPacket packet = (PlayerFoldPacket) p;
             PokerClient pc = PokerClient.getInstance();
@@ -138,7 +138,7 @@ public class EventListener {
             pc.newTurnStart(40);
             pc.updateDisplay();
             if (next.id == client.id) pc.setCurrentTurn(packet.minimumRaise, packet.maximumBet, packet.toStay - packet.currentBet,
-                    packet.potAmount);
+                    packet.potAmount, packet.currentBet, packet.currentChips);
         } else if (p instanceof PlayerShowHandPacket) {
             PlayerShowHandPacket packet = (PlayerShowHandPacket) p;
             PokerClient pc = PokerClient.getInstance();
@@ -152,6 +152,7 @@ public class EventListener {
             PlayerData playerData = pc.getPlayerHandler().getPlayer(packet.id);
             playerData.betAmount = packet.amount;
             playerData.chips = packet.chips;
+            playerData.isCurrentTurn = true;
 
             for (PlayerData d : pc.getPlayerHandler().players) {
                 if (d.id != packet.id) {
@@ -175,12 +176,17 @@ public class EventListener {
 
             pc.updateTableDisplay(packet.potAmount, packet.tableCard1, packet.tableCard2, packet.tableCard3, null, null);
 
-            PlayerData next = pc.getPlayerHandler().getPlayer(packet.firstTurn);
-            next.isCurrentTurn = true;
-            pc.newTurnStart(40);
-            pc.updateDisplay();
-            if (next.id == client.id) pc.setCurrentTurn(packet.minimumRaise, packet.maximumBet, 0, packet.potAmount);
-            else pc.setOtherPlayerTurn();
+            if (packet.firstTurn != -1) {
+                PlayerData next = pc.getPlayerHandler().getPlayer(packet.firstTurn);
+                next.isCurrentTurn = true;
+                pc.newTurnStart(40);
+                pc.updateDisplay();
+                if (next.id == client.id) pc.setCurrentTurn(packet.minimumRaise, packet.maximumBet, 0, packet.potAmount, 0,
+                        packet.currentChips);
+                else pc.setOtherPlayerTurn();
+            } else {
+                pc.setOtherPlayerTurn();
+            }
         } else if (p instanceof GamestateTurnPacket) {
             GamestateTurnPacket packet = (GamestateTurnPacket) p;
             PokerClient pc = PokerClient.getInstance();
@@ -192,12 +198,17 @@ public class EventListener {
                     pc.getTableDisplay().getCard2().getCurrentCard(), pc.getTableDisplay().getCard3().getCurrentCard(),
                     packet.tableCard4, null);
 
-            PlayerData next = pc.getPlayerHandler().getPlayer(packet.firstTurn);
-            next.isCurrentTurn = true;
-            pc.newTurnStart(40);
-            pc.updateDisplay();
-            if (next.id == client.id) pc.setCurrentTurn(packet.minimumRaise, packet.maximumBet, 0, packet.potAmount);
-            else pc.setOtherPlayerTurn();
+            if (packet.firstTurn != -1) {
+                PlayerData next = pc.getPlayerHandler().getPlayer(packet.firstTurn);
+                next.isCurrentTurn = true;
+                pc.newTurnStart(40);
+                pc.updateDisplay();
+                if (next.id == client.id) pc.setCurrentTurn(packet.minimumRaise, packet.maximumBet, 0, packet.potAmount, 0,
+                        packet.currentChips);
+                else pc.setOtherPlayerTurn();
+            } else {
+                pc.setOtherPlayerTurn();
+            }
         } else if (p instanceof GamestateRiverPacket) {
             GamestateRiverPacket packet = (GamestateRiverPacket) p;
             PokerClient pc = PokerClient.getInstance();
@@ -209,18 +220,36 @@ public class EventListener {
                     pc.getTableDisplay().getCard2().getCurrentCard(), pc.getTableDisplay().getCard3().getCurrentCard(),
                     pc.getTableDisplay().getCard4().getCurrentCard(), packet.tableCard5);
 
-            PlayerData next = pc.getPlayerHandler().getPlayer(packet.firstTurn);
-            next.isCurrentTurn = true;
-            pc.newTurnStart(40);
-            pc.updateDisplay();
-            if (next.id == client.id) pc.setCurrentTurn(packet.minimumRaise, packet.maximumBet, 0, packet.potAmount);
-            else pc.setOtherPlayerTurn();
+            if (packet.firstTurn != -1) {
+                PlayerData next = pc.getPlayerHandler().getPlayer(packet.firstTurn);
+                next.isCurrentTurn = true;
+                pc.newTurnStart(40);
+                pc.updateDisplay();
+                if (next.id == client.id) pc.setCurrentTurn(packet.minimumRaise, packet.maximumBet, 0, packet.potAmount, 0,
+                        packet.currentChips);
+                else pc.setOtherPlayerTurn();
+            } else {
+                pc.setOtherPlayerTurn();
+            }
         } else if (p instanceof GamestateShowdownPacket) {
             GamestateShowdownPacket packet = (GamestateShowdownPacket) p;
             PokerClient pc = PokerClient.getInstance();
             pc.currentState = GameState.SHOWDOWN;
             pc.handleShowdownData(packet.data);
             pc.newTurnStart(10);
+        } else if (p instanceof GamestatePregamePacket) {
+            GamestatePregamePacket packet = (GamestatePregamePacket) p;
+            PokerClient pc = PokerClient.getInstance();
+            for (int i = 0; i < packet.waiting.length; i++) {
+                TwoInt ti = packet.waiting[i];
+                PlayerData pd = pc.getPlayerHandler().getPlayer(ti.x);
+                pd.chips = ti.y;
+                pd.inPlay = false;
+                pd.isCurrentTurn = false;
+                pd.betAmount = 0;
+                pd.dealer = false;
+            }
+            pc.updateDisplay();
         }
 
 //        if(p instanceof AddConnectionPacket) {

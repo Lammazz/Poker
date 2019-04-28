@@ -41,7 +41,6 @@ public class CardDisplay {
     }
 
     public void setFaceDown() {
-        if (faceDown) return;
         faceDown = true;
         currentCard = null;
         view.setImage(faceDownCard);
@@ -52,8 +51,8 @@ public class CardDisplay {
     public void setCard(Card card) {
         if (card == null) {
             currentCard = Card.ACE_CLUBS;
-            faceDown = false;
             hide();
+            faceDown = false;
         } else {
             if (faceDown) view.setImage(source);
             faceDown = false;

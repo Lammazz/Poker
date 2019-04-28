@@ -23,7 +23,9 @@ public class ConnectionHandler {
     }
 
     public static void sendAll(Packet packet) {
-        for (Connection connection : connections) connection.sendObject(packet);
+        for (Connection connection : connections) {
+            if (connection.running) connection.sendObject(packet);
+        }
     }
 
     public static Connection getConnection(int id) {
