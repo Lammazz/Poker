@@ -40,7 +40,10 @@ public class ControlDisplay {
                                 String newValue) {
                 String s = newValue;
                 if (!s.matches("\\d*")) s = s.replaceAll("[^\\d]", "");
-                int newPreview = Integer.parseInt(s);
+                int newPreview = 0;
+                try{
+                    newPreview = Integer.parseInt(s);
+                } catch (NumberFormatException e) {}
                 if (newPreview > maximumBet) newPreview = maximumBet;
                 if (newPreview < minimumBet) newPreview = minimumBet;
                 previewAmount = newPreview;
@@ -319,6 +322,7 @@ public class ControlDisplay {
         maximumBet = maxBet - currentBet;
         toCall = call;
         chips = currentChips;
+        if (toCall > chips) toCall = chips;
 
         String s;
         if (toCall == 0) s = "Check";
@@ -327,12 +331,12 @@ public class ControlDisplay {
 
         callButton.setText(s);
 
-        if (potAmount > maxBet) potAmount = maxBet;
+        if (potAmount > maximumBet) potAmount = maximumBet;
         potPercent.setMin(minBet);
         potPercent.setMax(potAmount > chips ? chips : potAmount);
         potPercent.setBlockIncrement((potPercent.getMax() - potPercent.getMin()) / 10);
         totalPercent.setMin(minBet);
-        totalPercent.setMax(maxBet > chips ? chips : maxBet);
+        totalPercent.setMax(maximumBet > chips ? chips : maximumBet);
         totalPercent.setBlockIncrement((totalPercent.getMax() - totalPercent.getMin()) / 10);
 
         previewAmount = minimumBet;

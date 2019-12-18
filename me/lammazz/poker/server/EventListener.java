@@ -94,15 +94,18 @@ public class EventListener {
             if (packet.amount < 0) packet.amount = 0;
             if (packet.amount > connection.playerData.chips) packet.amount = connection.playerData.chips;
 
-            int raiseAmount = packet.amount - ps.toStay;
-            if (raiseAmount != 0) ps.minimumRaise = raiseAmount;
+            int raiseAmount = packet.amount - ps.toStay + connection.playerData.betAmount;
 
             connection.playerData.bet(packet.amount);
-            ps.toStay = connection.playerData.betAmount;
+
+            if (raiseAmount > 0) {
+                ps.minimumRaise = raiseAmount;
+                ps.toStay = connection.playerData.betAmount;
+            }
 
             Connection nextTurn = ps.playerAtSeat(ps.nextPlayingSeat(connection.playerData.seat, false));
 
-            if (ps.countNotAllIn() < 2 || (nextTurn.playerData.hasActed && nextTurn.playerData.betAmount == ps.toStay)) {
+            if (ps.countNotAllIn() == 0 || (nextTurn.playerData.hasActed && nextTurn.playerData.betAmount == ps.toStay)) {
                 ConnectionHandler.sendAll(new PlayerBetPacket(connection.id, connection.playerData.betAmount, connection.playerData.chips,
                         -1, -1, -1, -1, -1,-1, -1));
                 ps.nextState();

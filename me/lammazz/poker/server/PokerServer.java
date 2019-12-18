@@ -428,6 +428,7 @@ public class PokerServer {
             }
 
             toStay = bigBlind;
+            minimumRaise = bigBlind;
 
             startPlayerTurn(utg.playerData);
 

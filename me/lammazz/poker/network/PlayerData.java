@@ -28,7 +28,7 @@ public class PlayerData implements Serializable {
     }
 
     public void bet(int amount) {
-        this. betAmount += amount;
+        this.betAmount += amount;
         this.contributed += amount;
         this.chips -= amount;
     }
